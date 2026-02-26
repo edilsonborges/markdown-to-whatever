@@ -14,7 +14,7 @@ html, body, #root {
 
 body {
   font-family: 'Inter', system-ui, sans-serif;
-  background-color: #FFFFFF;
+  background-color: #F5F5F5;
   color: #1A1A1A;
 }
 
@@ -74,4 +74,60 @@ body {
 
 .spinner {
   animation: spin 1s linear infinite;
+}
+
+/* Print styles */
+@media print {
+  html, body, #root {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  /* Hide header, editor, toasts - show only preview */
+  [data-testid="header"],
+  [data-testid="editor-pane"],
+  .toast-enter,
+  .toast-exit,
+  [role="region"][aria-label="Notificações"] {
+    display: none !important;
+  }
+
+  /* Reset flex layout constraints for print */
+  #root > div {
+    height: auto !important;
+    display: block !important;
+    background: white !important;
+  }
+
+  main {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: white !important;
+    gap: 0 !important;
+  }
+
+  [data-testid="preview-pane"] {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Hide the "Preview" label bar when printing */
+  [data-testid="preview-pane"] > div:first-child {
+    display: none !important;
+  }
+
+  [data-testid="preview-content-area"] {
+    overflow: visible !important;
+    height: auto !important;
+    padding: 0 !important;
+  }
+
+  .preview-content {
+    break-inside: auto;
+  }
 }

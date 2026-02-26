@@ -18,7 +18,8 @@ export function StyleSelector({ selectedStyle, onStyleChange }: StyleSelectorPro
         id="style-selector"
         value={selectedStyle}
         onChange={(e) => onStyleChange(e.target.value as StyleType)}
-        className="px-3 py-1.5 text-sm border border-border rounded-md bg-primary text-text focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent cursor-pointer hover:bg-secondary transition-colors"
+        className="px-3 py-1.5 text-sm border border-border rounded-md bg-white text-text focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent cursor-pointer hover:bg-neutral-50 transition-colors"
+        data-testid="style-selector"
         aria-label="Selecionar estilo do documento"
       >
         {styles.map((style) => (

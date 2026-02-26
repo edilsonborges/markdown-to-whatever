@@ -57,7 +57,7 @@ function App() {
   );
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-neutral-100">
       <Header
         selectedStyle={selectedStyle}
         onStyleChange={setSelectedStyle}
@@ -66,7 +66,7 @@ function App() {
         hasContent={hasContent}
       />
 
-      <main className="flex-1 flex min-h-0">
+      <main className="flex-1 flex min-h-0 gap-px bg-border">
         <EditorPane value={markdown} onChange={setMarkdown} />
         <PreviewPane markdown={debouncedMarkdown} styleType={selectedStyle} />
       </main>

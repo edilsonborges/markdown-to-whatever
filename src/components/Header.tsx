@@ -19,7 +19,7 @@ export function Header({
   hasContent
 }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-10 bg-primary border-b border-border px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
+    <header className="sticky top-0 z-10 bg-white border-b border-border px-4 py-3 flex items-center justify-between gap-4 flex-wrap" data-testid="header">
       <Logo />
       <div className="flex items-center gap-4 flex-wrap">
         <StyleSelector

@@ -27,11 +27,11 @@ export function PreviewPane({ markdown, styleType }: PreviewPaneProps) {
   const isEmpty = !markdown.trim();
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-      <div className="px-4 py-2 bg-secondary border-b border-border">
-        <span className="text-sm font-medium text-gray-600">Preview</span>
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden" data-testid="preview-pane">
+      <div className="px-4 py-2 bg-white border-b border-border">
+        <span className="text-sm font-medium text-gray-500 uppercase tracking-wide text-xs">Preview</span>
       </div>
-      <div className="flex-1 overflow-auto p-4 bg-primary">
+      <div className="flex-1 overflow-auto p-6 bg-white" data-testid="preview-content-area">
         <style>{styleCSS}</style>
         {isEmpty ? (
           <div className="h-full flex items-center justify-center">
@@ -40,6 +40,7 @@ export function PreviewPane({ markdown, styleType }: PreviewPaneProps) {
         ) : (
           <div
             className="preview-content max-w-none"
+            data-testid="preview-rendered"
             dangerouslySetInnerHTML={{ __html: html }}
             aria-live="polite"
             role="region"

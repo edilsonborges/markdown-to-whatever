@@ -11,16 +11,17 @@ Seu texto aparecerá no preview ao lado →`;
 
 export function EditorPane({ value, onChange }: EditorPaneProps) {
   return (
-    <div className="flex-1 flex flex-col min-h-0 border-r border-border">
-      <div className="px-4 py-2 bg-secondary border-b border-border">
-        <span className="text-sm font-medium text-gray-600">Editor</span>
+    <div className="flex-1 flex flex-col min-h-0" data-testid="editor-pane">
+      <div className="px-4 py-2 bg-white border-b border-border">
+        <span className="text-sm font-medium text-gray-500 uppercase tracking-wide text-xs">Editor</span>
       </div>
       <textarea
-        className="editor-textarea flex-1 w-full p-4 bg-secondary text-text text-sm leading-relaxed"
+        className="editor-textarea flex-1 w-full p-4 bg-white text-text text-sm leading-relaxed"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         spellCheck={false}
+        data-testid="editor-textarea"
         aria-label="Editor de Markdown"
       />
     </div>
