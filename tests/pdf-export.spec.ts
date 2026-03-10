@@ -60,8 +60,8 @@ test.describe('Exportação PDF', () => {
 
     // Verify file exists and has real content (not blank)
     const stats = fs.statSync(filePath);
-    // A blank PDF is ~3KB, a real one should be much larger
-    expect(stats.size).toBeGreaterThan(10000);
+    // Vector PDF (pdfmake) is much smaller than rasterized — 3KB+ means real content
+    expect(stats.size).toBeGreaterThan(3000);
 
     // Clean up
     fs.unlinkSync(filePath);

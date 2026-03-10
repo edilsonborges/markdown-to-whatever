@@ -1,187 +1,325 @@
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
+import pdfMake from 'pdfmake/build/pdfmake';
+import * as pdfFontsHelvetica from 'pdfmake/build/standard-fonts/Helvetica';
+import * as pdfFontsCourier from 'pdfmake/build/standard-fonts/Courier';
+import * as pdfFontsTimes from 'pdfmake/build/standard-fonts/Times';
+import htmlToPdfmake from 'html-to-pdfmake';
 import { marked } from 'marked';
 import type { StyleType } from '../types';
 
-const pdfStyles: Record<StyleType, string> = {
-  basico: `
-    .pdf-doc { font-family: Georgia, 'Times New Roman', serif; }
-    .pdf-doc h1, .pdf-doc h2, .pdf-doc h3 { font-family: system-ui, -apple-system, sans-serif; }
-  `,
-  academico: `
-    .pdf-doc { font-family: Georgia, 'Times New Roman', serif; line-height: 1.9; }
-    .pdf-doc h1, .pdf-doc h2, .pdf-doc h3 { font-family: Georgia, serif; }
-    .pdf-doc p { text-align: justify; }
-  `,
-  tecnico: `
-    .pdf-doc { font-family: system-ui, -apple-system, sans-serif; }
-    .pdf-doc h1, .pdf-doc h2, .pdf-doc h3 {
-      font-family: system-ui, -apple-system, sans-serif;
-      border-bottom: 2px solid #2563EB;
-      padding-bottom: 6px;
-    }
-    .pdf-doc pre { background: #1E293B !important; color: #E2E8F0 !important; border-top-color: #3B82F6 !important; }
-    .pdf-doc pre code { color: #E2E8F0 !important; }
-    .pdf-doc code { background: #1E293B; color: #E2E8F0; }
-  `,
-  compacto: `
-    .pdf-doc { font-family: system-ui, -apple-system, sans-serif; font-size: 13px !important; line-height: 1.5 !important; }
-    .pdf-doc h1 { font-size: 1.5em !important; }
-    .pdf-doc h2 { font-size: 1.25em !important; }
-    .pdf-doc h3 { font-size: 1.1em !important; }
-    .pdf-doc p { margin: 0.4em 0 !important; }
-    .pdf-doc pre { padding: 10px 14px !important; margin: 0.6em 0 !important; }
-    .pdf-doc blockquote { margin: 0.5em 0 !important; }
-  `,
+// Register standard PDF fonts (no external font files needed)
+pdfMake.fonts = {
+  Helvetica: {
+    normal: 'Helvetica',
+    bold: 'Helvetica-Bold',
+    italics: 'Helvetica-Oblique',
+    bolditalics: 'Helvetica-BoldOblique',
+  },
+  Courier: {
+    normal: 'Courier',
+    bold: 'Courier-Bold',
+    italics: 'Courier-Oblique',
+    bolditalics: 'Courier-BoldOblique',
+  },
+  Times: {
+    normal: 'Times-Roman',
+    bold: 'Times-Bold',
+    italics: 'Times-Italic',
+    bolditalics: 'Times-BoldItalic',
+  },
 };
 
-const basePdfCSS = `
-  .pdf-doc {
-    font-size: 15px;
-    line-height: 1.7;
-    color: #1a1a1a;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
+// Load font data into VFS
+const fontsData = {
+  ...(pdfFontsHelvetica as Record<string, unknown>),
+  ...(pdfFontsCourier as Record<string, unknown>),
+  ...(pdfFontsTimes as Record<string, unknown>),
+};
+if ('vfs' in fontsData && typeof fontsData.vfs === 'object') {
+  pdfMake.vfs = fontsData.vfs as Record<string, string>;
+} else {
+  // Fallback: merge all vfs objects from individual font modules
+  const vfs: Record<string, string> = {};
+  for (const mod of [pdfFontsHelvetica, pdfFontsCourier, pdfFontsTimes]) {
+    const m = mod as Record<string, unknown>;
+    if (m.vfs && typeof m.vfs === 'object') {
+      Object.assign(vfs, m.vfs);
+    } else if (m.default && typeof m.default === 'object') {
+      const d = m.default as Record<string, unknown>;
+      if (d.vfs && typeof d.vfs === 'object') {
+        Object.assign(vfs, d.vfs);
+      }
+    }
   }
+  pdfMake.vfs = vfs as Record<string, string>;
+}
 
-  /* Headings */
-  .pdf-doc h1 {
-    font-size: 1.8em;
-    font-weight: 700;
-    margin: 0 0 0.5em 0;
-    color: #111;
-    letter-spacing: -0.01em;
-  }
-  .pdf-doc h2 {
-    font-size: 1.4em;
-    font-weight: 600;
-    margin: 1.6em 0 0.4em 0;
-    color: #222;
-    padding-top: 0.8em;
-    border-top: 1px solid #e0e0e0;
-  }
-  .pdf-doc h3 {
-    font-size: 1.15em;
-    font-weight: 600;
-    margin: 1.3em 0 0.3em 0;
-    color: #333;
-  }
-  .pdf-doc h4, .pdf-doc h5, .pdf-doc h6 {
-    font-size: 1em;
-    font-weight: 600;
-    margin: 1em 0 0.3em 0;
-    color: #444;
-  }
+interface ThemeConfig {
+  defaultFont: string;
+  fontSize: number;
+  lineHeight: number;
+  headingFont: string;
+  codeFont: string;
+  codeFontSize: number;
+  accentColor: string;
+  textColor: string;
+  headingColor: string;
+  pageMargins: [number, number, number, number];
+  paragraphSpacing: number;
+  justifyText: boolean;
+}
 
-  /* Paragraphs */
-  .pdf-doc p {
-    margin: 0.7em 0;
-  }
+const themeConfigs: Record<StyleType, ThemeConfig> = {
+  basico: {
+    defaultFont: 'Helvetica',
+    fontSize: 11,
+    lineHeight: 1.4,
+    headingFont: 'Helvetica',
+    codeFont: 'Courier',
+    codeFontSize: 9,
+    accentColor: '#2563EB',
+    textColor: '#1A1A1A',
+    headingColor: '#111111',
+    pageMargins: [40, 40, 40, 40],
+    paragraphSpacing: 6,
+    justifyText: false,
+  },
+  academico: {
+    defaultFont: 'Times',
+    fontSize: 12,
+    lineHeight: 1.6,
+    headingFont: 'Times',
+    codeFont: 'Courier',
+    codeFontSize: 9,
+    accentColor: '#333333',
+    textColor: '#1A1A1A',
+    headingColor: '#000000',
+    pageMargins: [50, 50, 50, 50],
+    paragraphSpacing: 8,
+    justifyText: true,
+  },
+  tecnico: {
+    defaultFont: 'Helvetica',
+    fontSize: 10,
+    lineHeight: 1.35,
+    headingFont: 'Helvetica',
+    codeFont: 'Courier',
+    codeFontSize: 9,
+    accentColor: '#2563EB',
+    textColor: '#1A1A1A',
+    headingColor: '#1E293B',
+    pageMargins: [40, 40, 40, 40],
+    paragraphSpacing: 5,
+    justifyText: false,
+  },
+  compacto: {
+    defaultFont: 'Helvetica',
+    fontSize: 9,
+    lineHeight: 1.25,
+    headingFont: 'Helvetica',
+    codeFont: 'Courier',
+    codeFontSize: 8,
+    accentColor: '#2563EB',
+    textColor: '#1A1A1A',
+    headingColor: '#222222',
+    pageMargins: [30, 30, 30, 30],
+    paragraphSpacing: 3,
+    justifyText: false,
+  },
+};
 
-  /* Lists */
-  .pdf-doc ul, .pdf-doc ol {
-    margin: 0.6em 0;
-    padding-left: 1.8em;
-  }
-  .pdf-doc li {
-    margin: 0.2em 0;
-  }
-  .pdf-doc li > ul, .pdf-doc li > ol {
-    margin: 0.1em 0;
-  }
+function buildStyles(theme: ThemeConfig) {
+  return {
+    'html-h1': {
+      fontSize: theme.fontSize * 2,
+      bold: true,
+      color: theme.headingColor,
+      font: theme.headingFont,
+      margin: [0, 0, 0, theme.paragraphSpacing * 2] as [number, number, number, number],
+    },
+    'html-h2': {
+      fontSize: theme.fontSize * 1.5,
+      bold: true,
+      color: theme.headingColor,
+      font: theme.headingFont,
+      margin: [0, theme.paragraphSpacing * 3, 0, theme.paragraphSpacing] as [number, number, number, number],
+    },
+    'html-h3': {
+      fontSize: theme.fontSize * 1.25,
+      bold: true,
+      color: theme.headingColor,
+      font: theme.headingFont,
+      margin: [0, theme.paragraphSpacing * 2, 0, theme.paragraphSpacing] as [number, number, number, number],
+    },
+    'html-h4': {
+      fontSize: theme.fontSize * 1.1,
+      bold: true,
+      color: theme.headingColor,
+      font: theme.headingFont,
+      margin: [0, theme.paragraphSpacing * 2, 0, theme.paragraphSpacing] as [number, number, number, number],
+    },
+    'html-p': {
+      margin: [0, theme.paragraphSpacing, 0, theme.paragraphSpacing] as [number, number, number, number],
+      alignment: theme.justifyText ? ('justify' as const) : ('left' as const),
+    },
+    'html-a': {
+      color: theme.accentColor,
+      decoration: 'underline' as const,
+    },
+    'html-strong': {
+      bold: true,
+    },
+    'html-em': {
+      italics: true,
+    },
+    'html-code': {
+      font: theme.codeFont,
+      fontSize: theme.codeFontSize,
+      background: '#F0F0F0',
+    },
+    'html-pre': {
+      font: theme.codeFont,
+      fontSize: theme.codeFontSize,
+      margin: [0, theme.paragraphSpacing, 0, theme.paragraphSpacing] as [number, number, number, number],
+      background: '#F5F5F5',
+    },
+    'html-blockquote': {
+      italics: true,
+      color: '#555555',
+      margin: [20, theme.paragraphSpacing, 0, theme.paragraphSpacing] as [number, number, number, number],
+    },
+    'html-li': {
+      margin: [0, 2, 0, 2] as [number, number, number, number],
+    },
+    'html-table': {
+      margin: [0, theme.paragraphSpacing, 0, theme.paragraphSpacing] as [number, number, number, number],
+    },
+    'html-th': {
+      bold: true,
+      fillColor: '#F0F4F8',
+      color: theme.textColor,
+    },
+    'html-td': {
+      color: theme.textColor,
+    },
+  };
+}
 
-  /* Code blocks - with decorative top border */
-  .pdf-doc pre {
-    background: #f8f8f8;
-    border: 1px solid #e0e0e0;
-    border-top: 3px solid #2563EB;
-    border-radius: 0 0 6px 6px;
-    padding: 14px 18px;
-    margin: 1em 0;
-    overflow-x: hidden;
-    word-wrap: break-word;
-    white-space: pre-wrap;
-    page-break-inside: avoid;
-  }
-  .pdf-doc pre code {
-    background: none !important;
-    border: none !important;
-    padding: 0 !important;
-    font-size: 0.85em;
-    line-height: 1.55;
-    color: #1a1a1a;
-  }
+function buildDefaultStyles(theme: ThemeConfig) {
+  return {
+    b: { bold: true },
+    strong: { bold: true },
+    i: { italics: true },
+    em: { italics: true },
+    h1: {
+      fontSize: theme.fontSize * 2,
+      bold: true,
+      color: theme.headingColor,
+      font: theme.headingFont,
+      marginBottom: theme.paragraphSpacing * 2,
+    },
+    h2: {
+      fontSize: theme.fontSize * 1.5,
+      bold: true,
+      color: theme.headingColor,
+      font: theme.headingFont,
+      marginBottom: theme.paragraphSpacing,
+    },
+    h3: {
+      fontSize: theme.fontSize * 1.25,
+      bold: true,
+      color: theme.headingColor,
+      font: theme.headingFont,
+      marginBottom: theme.paragraphSpacing,
+    },
+    h4: {
+      fontSize: theme.fontSize * 1.1,
+      bold: true,
+      color: theme.headingColor,
+      font: theme.headingFont,
+    },
+    a: {
+      color: theme.accentColor,
+      decoration: 'underline',
+    },
+    th: {
+      bold: true,
+      fillColor: '#F0F4F8',
+    },
+    code: {
+      font: theme.codeFont,
+      fontSize: theme.codeFontSize,
+      background: '#F0F0F0',
+      margin: [0, 0, 0, 0],
+    },
+    pre: {
+      font: theme.codeFont,
+      fontSize: theme.codeFontSize,
+      background: '#F5F5F5',
+      margin: [0, 2, 0, 2],
+    },
+  };
+}
 
-  /* Inline code */
-  .pdf-doc code {
-    background: #f0f0f0;
-    border: 1px solid #ddd;
-    border-radius: 3px;
-    padding: 1px 5px;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 0.88em;
-  }
+function buildTableLayouts() {
+  return {
+    cleanLayout: {
+      hLineWidth: (i: number, node: { table: { body: unknown[] } }) => {
+        return (i === 0 || i === node.table.body.length) ? 1 : 0.5;
+      },
+      vLineWidth: (i: number, node: { table: { widths: unknown[] } }) => {
+        return (i === 0 || i === node.table.widths.length) ? 1 : 0.5;
+      },
+      hLineColor: () => '#D0D7DE',
+      vLineColor: () => '#D0D7DE',
+      paddingLeft: () => 6,
+      paddingRight: () => 6,
+      paddingTop: () => 4,
+      paddingBottom: () => 4,
+    },
+  };
+}
 
-  /* Blockquote - left accent bar */
-  .pdf-doc blockquote {
-    margin: 1em 0;
-    padding: 8px 16px;
-    border-left: 4px solid #2563EB;
-    background: #f7f9fc;
-    color: #444;
-    border-radius: 0 4px 4px 0;
-    page-break-inside: avoid;
-  }
-  .pdf-doc blockquote p {
-    margin: 0.3em 0;
-  }
+/**
+ * Percorre a árvore do pdfmake e transforma nodes de inline code
+ * para incluir espaços internos com o mesmo background,
+ * simulando padding CSS no texto.
+ */
+function addCodePadding(nodes: unknown[]): void {
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    if (!node || typeof node !== 'object') continue;
+    const n = node as Record<string, unknown>;
 
-  /* Tables */
-  .pdf-doc table {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 1em 0;
-    font-size: 0.92em;
-    page-break-inside: avoid;
-  }
-  .pdf-doc th {
-    background: #f0f4f8;
-    font-weight: 600;
-    text-align: left;
-    border: 1px solid #d0d7de;
-    padding: 8px 12px;
-  }
-  .pdf-doc td {
-    border: 1px solid #d0d7de;
-    padding: 8px 12px;
-  }
-  .pdf-doc tr:nth-child(even) td {
-    background: #fafbfc;
-  }
+    // Se é inline code, adicionar espaços finos dentro do texto (mesmo background)
+    if (n.style && Array.isArray(n.style) && (n.style as string[]).includes('html-code')) {
+      if (typeof n.text === 'string') {
+        n.text = ` ${n.text} `;
+        n.lineHeight = 1.6;
+      }
+    }
 
-  /* Links */
-  .pdf-doc a {
-    color: #2563EB;
-    text-decoration: none;
+    // Recursão em filhos
+    if (Array.isArray(n.text)) addCodePadding(n.text as unknown[]);
+    if (Array.isArray(n.stack)) addCodePadding(n.stack as unknown[]);
+    if (Array.isArray(n.columns)) addCodePadding(n.columns as unknown[]);
+    if (n.table && typeof n.table === 'object') {
+      const table = n.table as Record<string, unknown>;
+      if (Array.isArray(table.body)) {
+        for (const row of table.body as unknown[][]) {
+          if (Array.isArray(row)) {
+            for (const cell of row) {
+              if (cell && typeof cell === 'object') {
+                const c = cell as Record<string, unknown>;
+                if (Array.isArray(c.text)) addCodePadding(c.text as unknown[]);
+                if (Array.isArray(c.stack)) addCodePadding(c.stack as unknown[]);
+              }
+            }
+          }
+        }
+      }
+    }
   }
-
-  /* Horizontal rule */
-  .pdf-doc hr {
-    border: none;
-    border-top: 1px solid #e0e0e0;
-    margin: 1.5em 0;
-  }
-
-  /* Images */
-  .pdf-doc img {
-    max-width: 100%;
-    height: auto;
-  }
-
-  /* Strong & emphasis */
-  .pdf-doc strong { font-weight: 700; }
-  .pdf-doc em { font-style: italic; }
-`;
+}
 
 export async function exportToPdf(
   markdown: string,
@@ -189,80 +327,31 @@ export async function exportToPdf(
   styleType: StyleType
 ): Promise<void> {
   const html = marked(markdown) as string;
-  const themeCSS = pdfStyles[styleType] || '';
+  const theme = themeConfigs[styleType];
 
-  const container = document.createElement('div');
-  container.style.position = 'absolute';
-  container.style.left = '0';
-  container.style.top = '0';
-  container.style.width = '714px'; // A4 minus margins
-  container.style.padding = '0';
-  container.style.background = 'white';
-  container.style.zIndex = '-9999';
-  container.innerHTML = `
-    <style>${basePdfCSS}${themeCSS}</style>
-    <div class="pdf-doc">${html}</div>
-  `;
+  const converted = htmlToPdfmake(html, {
+    tableAutoSize: true,
+    defaultStyles: buildDefaultStyles(theme),
+  });
 
-  document.body.appendChild(container);
+  // Adicionar espaços ao redor de inline code para simular padding
+  addCodePadding(converted);
 
-  try {
-    await document.fonts.ready;
-    // Small delay for layout to settle
-    await new Promise(r => setTimeout(r, 100));
+  const docDefinition = {
+    content: converted,
+    defaultStyle: {
+      font: theme.defaultFont,
+      fontSize: theme.fontSize,
+      lineHeight: theme.lineHeight,
+      color: theme.textColor,
+    },
+    styles: buildStyles(theme),
+    pageMargins: theme.pageMargins,
+    pageSize: 'A4' as const,
+  };
 
-    const canvas = await html2canvas(container, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      windowWidth: 714,
-      logging: false,
-    });
+  const tableLayouts = buildTableLayouts();
 
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-    });
-
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 15;
-    const contentWidth = pageWidth - margin * 2;
-    const contentHeight = (canvas.height * contentWidth) / canvas.width;
-
-    if (contentHeight <= pageHeight - margin * 2) {
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, contentWidth, contentHeight);
-    } else {
-      const pageContentHeight = pageHeight - margin * 2;
-      const totalPages = Math.ceil(contentHeight / pageContentHeight);
-      const sourceSliceHeight = (canvas.height / contentHeight) * pageContentHeight;
-
-      for (let page = 0; page < totalPages; page++) {
-        if (page > 0) pdf.addPage();
-
-        const sourceY = page * sourceSliceHeight;
-        const sliceHeight = Math.min(sourceSliceHeight, canvas.height - sourceY);
-        const destHeight = (sliceHeight / sourceSliceHeight) * pageContentHeight;
-
-        const pageCanvas = document.createElement('canvas');
-        pageCanvas.width = canvas.width;
-        pageCanvas.height = sliceHeight;
-        const ctx = pageCanvas.getContext('2d')!;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-        ctx.drawImage(
-          canvas,
-          0, sourceY, canvas.width, sliceHeight,
-          0, 0, canvas.width, sliceHeight
-        );
-
-        pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', margin, margin, contentWidth, destHeight);
-      }
-    }
-
-    pdf.save(`${title}.pdf`);
-  } finally {
-    document.body.removeChild(container);
-  }
+  const pdf = pdfMake.createPdf(docDefinition, tableLayouts);
+  pdf.download(`${title}.pdf`);
 }
